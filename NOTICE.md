@@ -25,7 +25,7 @@
 > 下記 `vocoders/` のヘルパー（`qso_dv_dxm.cpp`・`md380_dv.c`・`dmr_ambe_fec.h`）は、GPL v3 系のコードと組み合わせて使うため **GPL v3 or later** とします。利用・再配布の際は、各上流のライセンス本文（LICENSE/COPYING）と著作権表示を必ず保持してください。
 > （本記載は法的助言ではありません。配布前に各リポジトリの最新の LICENSE を確認してください。各作者名・ライセンス版は 2026-11 時点の確認に基づきます。）
 >
-> GPL v3 の本文は `dxmcore/source/vocoders/LICENSE` に同梱しています。各ヘルパーの先頭には `SPDX-License-Identifier: GPL-3.0-or-later` を記載しています。
+> GPL v3 の本文は `vocoders/LICENSE` に同梱しています。各ヘルパーの先頭には `SPDX-License-Identifier: GPL-3.0-or-later` を記載しています。
 
 ### QSO One ボコーダー
 - 取得元: `github.com/greyfoxsolid/vocoder`（ライセンス: GPL v3）

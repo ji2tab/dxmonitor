@@ -7,20 +7,25 @@ D-STAR・DMR・YSF のホットスポット（MMDVM_HS_Hat）とネット接続�
 | | |
 |---|---|
 | 配布物 | [Releases](https://github.com/ji2tab/dxmonitor/releases) の `dxmonitor_bin_<版>_<arch>.tar.gz` |
-| 入れ方 | [`INSTALL-BIN.md`](INSTALL-BIN.md) |
-| 作り方（配る側） | [`BUILD-BIN.md`](BUILD-BIN.md)・`make_dist.sh` |
+| 入れ方 | [`docs/INSTALL-BIN.md`](docs/INSTALL-BIN.md) |
+| 作り方（配る側） | [`docs/BUILD-BIN.md`](docs/BUILD-BIN.md) |
 
 対象: Raspberry Pi（64bit OS）＋ MMDVM_HS_Hat ＋ SSD1306 OLED。配布物は CPU と OS（glibc）ごとに別です。同梱の `BUILD-INFO.txt` で確認してください。
 
-## このリポジトリにあるもの
+## 構成
 
-| ファイル | 中身 |
-|---|---|
-| `install.sh` | バイナリ版インストーラ（配布物にも同じものが入っている） |
-| `INSTALL-BIN.md` | 導入の手順 |
-| `BUILD-BIN.md`・`make_dist.sh` | 配布物の作り方 |
-| `dxmcore/source/vocoders/` | ソフトウェア AMBE のビルド用資材（6 ファイル）。インストール時に同意した人だけが `install.sh` 経由でここから取得する |
-| `NOTICE.md`・`LICENSE` | 注意事項と第三者ソフトウェアの帰属、ライセンス |
+```
+README.md  NOTICE.md  LICENSE
+docs/
+  INSTALL-BIN.md     導入の手順（受け取る側）
+  BUILD-BIN.md       配布物の作り方（配る側）
+tools/
+  install_bin.sh     バイナリ版インストーラの原本（配布物の中では install.sh）
+  make_dist.sh       配布物（tar.gz）を作る
+vocoders/            ソフトウェア AMBE のビルド用資材（6 ファイル。GPL v3）
+```
+
+`vocoders/` は、インストール時にソフトウェア AMBE に同意した人だけが `install.sh` 経由で取得します。同意しなければ取得しません。
 
 ## AMBE ボコーダーについて（重要）
 
