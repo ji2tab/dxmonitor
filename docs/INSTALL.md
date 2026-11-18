@@ -1,347 +1,175 @@
-# dxmcore 単体の導入手順（HAT なし）
+# dxmonitor インストール手順（バイナリ配布）
 
-PC・Raspberry Pi・Incus コンテナなどで、**無線機（HAT）を使わずに**ネットの受信とブラウザ PTT だけを使うための手順。
-
-> **ホットスポット（MMDVM_HS_Hat などの HAT あり）を作るときは `dxhotspot-setup.md`**（dxhotspot のパッケージの `SETUP.md`）を使う。dxmcore もそちらの install.sh がまとめて入れる。
+Raspberry Pi などに、**バイナリ配布（ソースの .py は配りません）**で入れる手順です。
 
 | 項目 | 内容 |
 |---|---|
-| 対象版 | dxmcore **1.8.5**（BUILD **20261116a**、パッケージ `dxmcore_1.8.5_<BUILD>.tar.gz`） |
-| 最終更新 | 2026-11-15 |
-| 根拠 | `source/install.sh`・`config.ini.example`・`dstar-live.service`・`live.py`・`app.py`・`dxconfig.py`・`web_config.py`・`ep_web.py`・`vocoders/build_qso_vocoder.sh`・`static/app.js`、`dxmonitor_changelog.md`・`06_config_reference.md` |
-| リポジトリ | `github.com/ji2tab/dxmonitor-w`（`main`）。§1.0 の curl ワンライナー |
-| 詳しい資料 | 構成 `01`／部品 `02`／仕様 `03`・`04`／ビルドと運用 `05`／設定の全キー `06`／課題 `07`／音量 `10`（`dxmonitor-docs/`） |
+| 対象版 | dxmonitor 1.8.5（配布物 `dxmonitor_bin_<版>_<arch>.tar.gz`） |
+| 最終更新 | 2026-11-18 |
+| 配布先 | GitHub の Releases: `https://github.com/ji2tab/dxmonitor/releases` |
+| 対象 | Raspberry Pi など 64bit（arm64）。CPU・OS の条件は配布物の `BUILD-INFO.txt` |
 
 ---
 
-## 0. 前提
+## 0. 入手
 
-- OS: Debian・Ubuntu 系（Raspberry Pi OS も可）。x86_64 の Ubuntu ＋ Incus コンテナでも動く。
-- Python 3.7 以上と openssl（install.sh が無ければ apt で入れる）。本体は Python の標準ライブラリだけで動く。
-- 外向きの UDP が通る回線（受信はホールパンチで NAT を越える。§8）。
-- **HAT なしでできること**: ネット側（`[mode] net`）の 3 方式への接続と受信、ブラウザ PTT（ネットが D-STAR・DMR・YSF のどれでも同じ。`ep_web.py`）。電波側は使わないので `[mode] rf = dstar`・`[hat] enable = no` のまま。無線機の UR の命令とガイダンス（音声の案内）は無線機（HAT）向けなので、単体では関係しない。
-- 音声の符号化・復号は 2 つの方式のどちらか:
+`https://github.com/ji2tab/dxmonitor/releases` から、最新の **`dxmonitor_bin_<版>_<arch>.tar.gz`** を落とします（`arch` は CPU。Raspberry Pi 64bit は `arm64`）。
 
-| `[ambe] mode` | 中身 | 要るもの |
-|---|---|---|
-| `server` | AMBEserver（AMBE3000／DV3000 の UDP 中継。別の機械でもよい） | AMBEserver の IP とポート（既定 2460） |
-| `soft` | ソフトのボコーダー（本体には同梱しない。§3） | QSO One をこの機械でビルド（git・g++）、または DroidStar プラグイン |
+- 配布物は **CPU ごとに別**です。`arm64` の配布物は x86_64 の PC では動きません。
+- **ビルド機より古い OS では動きません。** 展開後の `BUILD-INFO.txt` の `glibc` の行を確認してください。
 
 ---
 
-## 1. インストール
+## 1. 要るもの
 
-### 1.0 git から curl でワンライナー（最短）
+### 機械（次のどれか。64bit の OS）
+1. Raspberry Pi ＋ MMDVM_HS_Hat（GPIO 接続）＋ SSD1306 OLED
+2. PC（x86_64 の Debian/Ubuntu）＋ USB の HAT アダプタ（`/dev/ttyUSB0` 等）。OLED なし
+3. PC ＋ MCP2221A ＋ MMDVM_HS_Hat。OLED は MCP2221A の I2C
 
-機械の上で直接、GitHub のリポジトリを取って `dxmcore/source/install.sh` を走らせる方法。**scp もパッケージ作りも要らない**。`install.sh` は自分のあるフォルダ（`source/`）から `/opt/dstar_ambe` へ入れるので、リポジトリを丸ごと取ってその中の `source/` で実行すればよい。
+### ネットワーク（インストール中に接続します）
+apt のリポジトリ、`github.com`（MMDVM-Host のソース）、`radioid.net`（DMRIds.dat）。
 
-> **前提**: リポジトリが **public** であること（private のままだと匿名の curl は 404 になる。§1.0.1）。`curl`・`tar`・`sudo`・Python 3.7+ が要る（`install.sh` が足りなければ apt で入れる）。
+### 事前に決めておくもの（すべて後から画面の「設定」タブで変えられます）
+| 項目 | 内容 |
+|---|---|
+| ホットスポットのコール | 無線機の RPT1 のコール部分 |
+| モジュール | RPT1 の 8 文字目。英字 1 文字（`G` は不可） |
+| 周波数 MHz | 単信。144〜146 / 430〜440 |
+| 接続先に名乗るコール | コール＋空白＋サフィックス 1 文字 |
+| 使える無線機の MY | カンマ区切り。`*` で制限しない |
+| DMR ID | radioid の ID。DMR を使わないなら空 |
+| カラーコード／宛先 TG | 0〜15（既定 `1`）／既定 `9` |
+| 電波側／ネット側 | `dstar` / `dmr` / `ysf` |
 
-```bash
-curl -fsSL https://github.com/ji2tab/dxmonitor-w/archive/refs/heads/main.tar.gz | tar xz \
-  && cd dxmonitor-w-main/dxmcore/source \
-  && sudo ./install.sh
-```
+---
 
-- 展開先は作業フォルダ直下の `dxmonitor-w-main/`（`main` ブランチの tar。タグで入れるなら `refs/tags/<tag>` に変える）。
-- 終わると `起動しました: https://<IP>:8080/`（`[web] tls = no` なら `http://`）。この後は **§2 の設定**（自局のコール・AMBEserver）を必ず行う。
-- Incus コンテナに入れるときも同じ（コンテナの中で上の 1 行）。root のシェルなら `install.sh` が自動でシステムユーザー `dstar` を作って動かす。
-- ソフトのボコーダー（`[ambe] mode = soft`）を使うなら、展開した `dxmonitor-w-main/dxmcore/source/vocoders/build_qso_vocoder.sh` を §3 の手順でビルドする。
-- 更新も同じ 1 行でよい（`config.ini` は `install.sh` が残す）。ただし `/opt/dstar_ambe` の持ち主が実行ユーザーのままかだけ確かめる（§6）。
+## 2. 入れる
 
-#### 1.0.1 リポジトリが private のとき
-
-匿名の curl は使えない。GitHub の個人アクセストークン（PAT。`repo` 権限）を使って取る:
-
-```bash
-TOKEN=<自分のPAT>
-curl -fsSL -H "Authorization: Bearer $TOKEN" \
-  https://api.github.com/repos/ji2tab/dxmonitor-w/tarball/main | tar xz \
-  && cd ji2tab-dxmonitor-w-*/dxmcore/source \
-  && sudo ./install.sh
-```
-
-- API 版の tar は展開先の名前が `ji2tab-dxmonitor-w-<短いハッシュ>/` になる（ワイルドカードで受ける）。
-- トークンを画面やログに残さないよう、`history` に残したくなければ先頭にスペースを置くか、別の端末で実行する。
-- 配布を楽にするなら、リポジトリを **public にするのがいちばん簡単**（ソースは公開可能版で、秘密情報は含めていない）。
-
-### 1.1 パッケージを送る（Mac で）
+**この機械のターミナル**で実行します。
 
 ```bash
-scp ~/Downloads/dxmcore_1.8.5_<BUILD>.tar.gz <ユーザー>@<機械>:~/
-```
-
-### 1.2 install.sh を実行する（機械で）
-
-パッケージは `source/`・`docs/` を直下に持つので、専用のフォルダに展開する。
-
-```bash
-rm -rf ~/dxm && mkdir ~/dxm
-tar xzf ~/dxmcore_1.8.5_<BUILD>.tar.gz -C ~/dxm
-cd ~/dxm/source
+tar xzf dxmonitor_bin_<版>_<arch>.tar.gz
+cd dxmonitor_bin_<版>_<arch>
+cat BUILD-INFO.txt          # 対象 CPU と OS を確認
 sudo ./install.sh
 ```
 
-`install.sh` がすること:
-1. `/opt/dstar_ambe` へ全 `*.py` と画面の `static/*`（`index.html`・`style.css`・`app.js`）をコピー（古い `dmr_gateway.py`・`__pycache__` は消す）。
-2. `config.ini` が無ければ `config.ini.example` から作る（あれば残す）。見本も `config.ini.example` として置く。
-3. 自己署名の証明書 `cert.pem`／`key.pem` を作る（無いときだけ。SAN に LAN の IP・`<ホスト名>`・`<ホスト名>.local`、10 年）。
-4. 持ち主を実行ユーザーにし、`key.pem` は 600、`config.ini` は 640。実行ユーザーは `DXM_USER` ＞ `/opt/dxhotspot` があれば `dstar` ＞ 既に入っている `dstar-live.service` の `User=` ＞ `sudo` した人の順で決める（20261101e〜）。**root にはしない**: root のシェル（`incus exec` など）で流すと `dstar` を作ってそれで動かす（20261102b〜）。
-5. `dstar-live.service` の `__USER__` を実行ユーザーにして登録し、起動。最後に `起動しました: https://<IP>:8080/` と出る（`[web] tls = no` なら `http://`）。
+ログを残すなら `sudo ./install.sh 2>&1 | tee ~/install_$(date +%Y%m%d_%H%M).log`。
 
-### 1.3 画面のファイル（20261031j 以前のパッケージのときだけ）
-
-20261031k の `install.sh` は `static/` の 3 本（`index.html`・`style.css`・`app.js`）をコピーするので、この手順は要らない。
-
-**20261031d〜j のパッケージ**の `install.sh` は `static/*.html` しかコピーせず、`static/style.css`・`static/app.js` が入らない（画面が動かない）。それで入れた機械は手でコピーする:
+Raspberry Pi Zero 2 W など非力な機械では 30〜60 分かかります。SSH が切れると止まるので `tmux` の中で実行してください。
 
 ```bash
-sudo cp ~/dxm/source/static/* /opt/dstar_ambe/static/
-sudo chown -R "$(id -un)":"$(id -un)" /opt/dstar_ambe/static      # 実行ユーザーが自分のとき
-sudo systemctl restart dstar-live
+sudo apt install -y tmux
+tmux new -s inst
+cd dxmonitor_bin_<版>_<arch> && sudo ./install.sh
+# 切れたら tmux attach -t inst
 ```
+
+### 聞かれること
+- **局の設定** … 上の表の項目。Enter で `[ ]` 内の既定のまま。書き方が違うと理由が表示されて聞き直されます。
+- **ボコーダー（3 問）** … (1) ソフトウェア AMBE を使うか（`yes` と入れたときだけ有効。Enter＝使わない＝ハードウェア AMBE 前提）、(2) QSO One をビルドするか（既定 `Y`）、(3) MD-380 のファームを使うか（既定 `N`）。最後に内容を表示して `[Y/n]` の確認。
+
+質問を省くなら環境変数で渡せます: `sudo DXH_CALLSIGN=<コール> DXH_MODULE=D DXH_FREQ_MHZ=438.990 ./install.sh --yes`。
+
+### 何をするのか（8 段）
+0/8 局の設定を質問 → 1/8 UART・I2C を有効化・Bluetooth を無効化 → 2/8 apt でパッケージ → 3/8 実行ユーザー `dstar` を作成 → **4/8 MMDVM-Host をビルド（20〜40 分）** → 5/8 MMDVM-Host.ini を生成 → 6/8 本体・画面・設定・証明書を配置 → 7/8 ホットスポット側を配置 → 8/8 サービス登録。
+4/8 でメモリが 1GB 未満なら、インストーラが一時 swap 1GB を自分で作り、終わったら消します。
+
+### 再起動
+初回は最後に「UART・I2C の設定を変えたので `sudo reboot` してください」と出ます。再起動するまで MMDVM-Host は HAT を掴めません。
+
+### AP のパスワード
+初回は Wi-Fi 予備 AP のパスワードが表示されます。**控えてください**（Wi-Fi につながらないまま起動したとき、この AP から設定できます）。後から `/opt/dxhotspot/hotspot.ini` の `[wifi] ap_password` で確認・変更できます。
 
 ---
 
-## 2. 最初の設定（config.ini）
+## 3. 確認
 
-`/opt/dstar_ambe/config.ini`。★の項目は画面の「設定」タブからも変えられる。最低限、次の 3 つを自分の値にする（`<コール>` は自局のコールサイン、`<サフィックス>` は英字 1 文字、`<AMBEserver の IP>` はその機械のアドレス）:
+再起動後、**この機械のターミナル**で:
 
-| 節・キー | 意味 |
+```bash
+systemctl is-active mmdvm-host dstar-live dxhotspot
+journalctl -u mmdvm-host -u dstar-live -u dxhotspot -b --no-pager | tail -40
+```
+
+3 つとも `active` で、ログに次が出ていれば正常です。
+
+```
+[web] dstar_ambe v1.8.5  http://127.0.0.1:8080/ でライブ配信中
+[hat] MMDVMHost 検出 127.0.0.1:20011
+[web] 統合画面 https://0.0.0.0:443/
+[oled] 表示開始 <コール> <モジュール> <周波数> / <IP>
+```
+
+**ブラウザ**で `https://<この機械の IP>/` を開きます（自己署名証明書なので警告。`http://` は `https://` に転送）。無線機の設定と最初の交信、画面の使い方は配布物に同梱の `SETUP.md` を参照。
+
+---
+
+## 4. 入った後の中身
+
+| 場所 | 中身 |
 |---|---|
-| `[dstar] mycall` | リフレクター（XLX・DCS）に名乗るコール（7 文字＋空白＋サフィックス）。無線機と同じサフィックスは避ける |
-| `[tx] mycall` | ブラウザ PTT のヘッダの MY。受信と同じコールにする |
-| `[ambe] mode`・`server_ip`・`server_port` | AMBEserver を使うならそのアドレス。ソフトなら §3 |
+| `/opt/dstar_ambe/` | 本体、画面（`static/`）、`config.ini`、証明書 |
+| `/opt/dxhotspot/` | ホットスポット側、`hotspot.ini` |
+| `/opt/MMDVMHost/` | MMDVM-Host（この機械でビルド）、`MMDVM-Host.ini`、`DMRIds.dat` |
+| `/opt/vocoders/` | ボコーダー（ソフトウェア AMBE に同意したときだけ） |
+| `/etc/systemd/system/` | `dstar-live`・`dxhotspot`・`mmdvm-host`・`dmrids-update.*` |
 
-sed で書き換える手順:
-
-```bash
-CFG=/opt/dstar_ambe/config.ini
-sudo sed -i '/^\[dstar\]/,/^\[/ s/^mycall *=.*/mycall = <コール> <サフィックス>/' $CFG
-sudo sed -i '/^\[tx\]/,/^\[/ s/^mycall *=.*/mycall = <コール> <サフィックス>/' $CFG
-sudo sed -i '/^\[ambe\]/,/^\[/ s/^server_ip *=.*/server_ip = <AMBEserver の IP>/' $CFG
-sudo systemctl restart dstar-live
-```
-
-ほかの主な既定値（`config.ini.example`）:
-
-| 節・キー | 既定 | メモ |
-|---|---|---|
-| `[web] port`・`tls` | `8080`・`yes` | ブラウザ PTT（マイク）には https が要る |
-| `[web] bind` | `0.0.0.0`（書いていなければ） | LAN から直接開ける。同じ機械の中だけにするなら `127.0.0.1` |
-| `[dstar] session_limit_min` | `30` | 接続の上限（分）。0 で無制限 |
-| `[mode] rf`・`net` | `dstar`・`dstar` | 単体では rf は dstar のまま。net は §4 |
-| `[hat] enable` | `no` | 単体では no のまま |
-| `[ambe] rx_level_db`・`tx_level_db` | `0`（見本には無い。無ければ既定） | 受信レベル・送信レベル（dB、-12〜+12）。設定タブ「音声」で変える。`10_audio_settings.md` |
-
-全キーは `06_config_reference.md`。
+サービスは `dstar` ユーザーで動きます。
 
 ---
 
-## 3. ソフトのボコーダー（`[ambe] mode = soft` のとき）
+## 5. ボコーダーについて
 
 > **AMBE ボコーダーについて（重要）**
-> - 本ソフトウェアは、**ハードウェアの AMBE（AMBEserver など）で使うことを基本**とします。
-> - ソフトウェアの AMBE（ソフトのボコーダー）は同梱も配布もしていません。使う場合は、**使用者が自己の実験・研究のために、自己の判断と責任で**入手・ビルドして使うものとします。
-> - ソフトウェアの AMBE の入手・ビルド・使用と、それによって生じたトラブル・損害・紛争について、**製作者は一切関与せず、いかなる責任も負いません。その責任はすべて使用者が負います。**
-> - くわしくは同梱の `NOTICE.md`。
+> - 本ソフトウェアは、**ハードウェアの AMBE（AMBEserver など）で使うことを基本**とします。入れたあと画面の「設定」タブで接続先を入れてください。
+> - ソフトウェアの AMBE は**同梱していません**。使う場合は、使用者が自己の実験・研究のために、自己の判断と責任で入手・ビルドして使うものとします。その入手・ビルド・使用と、それによって生じたトラブル・損害・紛争について、**製作者は一切関与せず、いかなる責任も負いません**。詳しくは `NOTICE.md`。
 
-既定は `[ambe] mode = server`（ハードウェアの AMBE。設定タブで AMBEserver の接続先を入れる）。この節は、上記に同意してソフトウェアの AMBE を使うときだけ読む（mbelib の注記どおり、実行物は特許の対象になり得る）。
-
-### 3.1 QSO One をビルドする
-
-github.com/greyfoxsolid/vocoder（GPL v3）をコミット固定でビルドし、`/opt/vocoders/qso_dv_dxm` を作る。DMR・YSF 側（AMBE+2）は本物の AMBE3000 に合わせる較正（符号化 −5.1 dB／復号 +6.3 dB）をビルドの前に当てる。
-
-```bash
-sudo apt-get install -y git build-essential
-sudo DXH_SOFT_AMBE_AGREE=yes bash ~/dxm/source/vocoders/build_qso_vocoder.sh /opt/vocoders     # 最後に「動作確認 OK」
-```
-
-`config.ini` に登録して選ぶ:
-
-```bash
-CFG=/opt/dstar_ambe/config.ini
-sudo tee -a $CFG >/dev/null <<'EOF'
-
-[vocoder.qso]
-label = QSO One（この機械でビルド）
-type = pipe
-command = /opt/vocoders/qso_dv_dxm
-gain = 1.0
-EOF
-sudo sed -i '/^\[ambe\]/,/^\[/ s/^mode *=.*/mode = soft/' $CFG
-sudo sed -i '/^\[ambe\]/,/^\[/ s/^# *vocoder *=.*/vocoder = qso/' $CFG
-sudo sed -i '/^\[dmr\]/,/^\[/ s/^vocoder *=.*/vocoder = qso/' $CFG
-sudo systemctl restart dstar-live
-```
-
-（`[ambe]` に `vocoder =` の行が無いとき（見本のコメント行を消した場合など）は `sudo sed -i '/^\[ambe\]/a vocoder = qso' $CFG`。）
-
-### 3.2 DroidStar プラグイン（予備）
-
-`vocoder_plugin.linux.arm64`（Raspberry Pi）／`vocoder_plugin.linux.x86_64`（PC）を `/opt/dstar_ambe/` に置き、`[vocoder.droidstar]`（`type = plugin`、`path = /opt/dstar_ambe/vocoder_plugin.linux.<種類>`、`gain = 2.0`）を足して選ぶ。dxhotspot の install.sh は github の wiblingen/droidstar_vocoder_plugin から取っている。声の高さ・声色が少しずれる（`07_issues.md`）。
-
-ボコーダーは設定タブ（ソフトのボコーダー／DMR のボコーダー）で再起動なしに切り替えられる。開けなければ元のまま。
+- インストール時に同意しなかった場合、ボコーダーに関するものは 1 バイトも取得しません。
+- ハードウェアの AMBE だけでは、D-STAR ⇔ DMR／YSF の変換と音声応答は使えません。
+- 取得に失敗しても（通信不可など）インストールは止まらず、ハードウェア AMBE 前提でそのまま続けます。後から入れ直せます。
 
 ---
 
-## 4. ネット側の方式（`[mode] net`）
+## 6. 入れ直す・消す
 
-| `net` | つなぐ先 | 画面の「接続先」の書き方 |
-|---|---|---|
-| `dstar` | D-STAR の XLX/XRF・DCS | 番号（3 桁）＋モジュール（英字 1 文字）。頭に `XLX`・`XRF`・`DCS` |
-| `dmr` | DMR のマスター（TGIF・BrandMeister・XLX の DMR） | `TG`＋番号・`BM`＋番号・`XLX`＋番号＋モジュール |
-| `ysf` | YSF（C4FM）のリフレクター | 番号 5 桁（頭に `YSF` も可）・名前・「ホスト:ポート」、XLX（番号＋モジュール） |
-
-変え方は 2 通り。どちらも dstar-live が再起動する。
-
-- **画面**: 設定タブの「NET モード」を選んで保存（単体のときだけ出る欄。ホットスポットでは運用タブの［モード変更］）。
-- **ファイル**:
+### 入れ直す
+同じ `install.sh` をもう一度流せば入れ替わります。設定（`config.ini`・`MMDVM-Host.ini`・`hotspot.ini`）は引き継がれ、局の設定は今の値が既定で出ます。先にバックアップ:
 
 ```bash
-sudo sed -i '/^\[mode\]/,/^\[/ s/^net *=.*/net = dmr/' /opt/dstar_ambe/config.ini
-sudo systemctl restart dstar-live
+sudo systemctl stop dxhotspot dstar-live
+sudo cp -a /opt/dstar_ambe /opt/dstar_ambe.bak.$(date +%Y%m%d)
+sudo cp -a /opt/dxhotspot  /opt/dxhotspot.bak.$(date +%Y%m%d)
 ```
 
-DMR を使うときは `[dmr] id`（7 桁か 9 桁）と、マスターのパスワード（`[dmr_net.tgif]`・`[dmr_net.bm]` の `password`。TGIF・BM は Self Care のホットスポット用）を設定タブで入れる。パスワードは画面のログでは伏せられる。単体には `/opt/MMDVMHost/DMRIds.dat`（`[dmr] dmrids`）が無い。無いときにブラウザ PTT の MY から ID を引けるかは**未確認**（引けなければ `[dmr] id` で出る見込み）。
-
-**画面から保存したときの再起動**: 本体は `sudo -n systemctl restart dstar-live` を呼ぶ。実行ユーザーが root でなければ sudo の許可が要る。無ければログに「dstar-live を再起動できません（手で再起動してください）」と出るので、`sudo systemctl restart dstar-live` を手で行うか、許可を足す（ユーザー名は自分のもの）:
-
+### 消す
 ```bash
-U=$(id -un); SC=$(command -v systemctl)
-sudo tee /etc/sudoers.d/dxmonitor >/dev/null <<EOF
-$U ALL=(root) NOPASSWD: $SC restart dstar-live
-EOF
-sudo chmod 440 /etc/sudoers.d/dxmonitor
-sudo visudo -cf /etc/sudoers.d/dxmonitor
-```
-
----
-
-## 5. 動作確認
-
-```bash
-journalctl -u dstar-live -b --no-pager | grep -E '\[web\]|\[ambe\]'
-curl -sk https://localhost:8080/config | grep -oE '"(version|build)": *"[^"]*"'
-```
-
-- `[web] dstar_ambe v1.8.5  https://0.0.0.0:8080/ でライブ配信中（RF DSTAR ⇔ NET …）` が出ればよい（モードは大文字。DSTAR・DMR・YSF）。
-- `"version": "1.8.5"`・`"build": "20261116a"` ならパッケージどおり。
-- ブラウザで `https://<IP>:8080/`（自己署名の警告は「詳細設定 → 続行」）。上部の版の表示が `v1.8.5　core 20261116a　UI 20261116a` で黄色でなければ、本体と画面がそろっている（黄色＝古いキャッシュか、§1.3 のコピー忘れ）。
-- 運用タブ: Network（プルダウン）→ 接続先 →［接続］で受信、［切断］で止める。右の一覧の行はクリックで欄へ、ダブルクリックでそのまま接続。TX でブラウザから送信（https のときだけ）。画面の使い方は `03_system_spec.md` §8 と画面の「説明」タブ。
-
----
-
-## 6. 更新
-
-**Mac の Downloads から scp → 展開して cp → chown → restart → BUILD を確かめる**。
-
-```bash
-# Mac で
-scp ~/Downloads/dxmcore_1.8.5_<BUILD>.tar.gz <ユーザー>@<機械>:~/
-
-# 機械で
-rm -rf ~/dxm && mkdir ~/dxm
-tar xzf ~/dxmcore_1.8.5_<BUILD>.tar.gz -C ~/dxm
-sudo cp ~/dxm/source/*.py /opt/dstar_ambe/
-sudo cp ~/dxm/source/static/* /opt/dstar_ambe/static/
-sudo chown -R "$(id -un)":"$(id -un)" /opt/dstar_ambe            # 実行ユーザー（dstar-live.service の User=）にそろえる
-sudo systemctl restart dstar-live
-sleep 5
-curl -sk https://localhost:8080/config | grep -o '"build": *"[^"]*"'   # "build": "20261116a"
-```
-
-- `config.ini` は上書きしない（新しいキーは本体が既定値で補う。古い `[dmr] net_boost_db` は起動時に `[ambe] rx_level_db` へ移す）。
-- 実行ユーザーは `grep ^User= /etc/systemd/system/dstar-live.service` で分かる。
-- ボコーダーが変わった版（変更履歴に書いてある）は `sudo DXH_SOFT_AMBE_AGREE=yes bash ~/dxm/source/vocoders/build_qso_vocoder.sh /opt/vocoders` もやり直す（同じソースならビルドを省いて動作確認だけ）。
-- `[web] tls = no` にしているなら `curl -s http://localhost:8080/config`。
-
----
-
-## 7. Incus コンテナに入れる
-
-```bash
-# 母艦で
-incus file push ~/dxmcore_1.8.5_<BUILD>.tar.gz <コンテナ>/root/
-incus exec <コンテナ> -- bash -c 'rm -rf /root/dxm && mkdir /root/dxm \
-  && tar xzf /root/dxmcore_1.8.5_<BUILD>.tar.gz -C /root/dxm \
-  && cd /root/dxm/source && ./install.sh'
-```
-
-- `incus exec` は root で動くので、実行ユーザーは root になる（画面からの再起動に sudo の許可は要らない）。
-- macvlan などで LAN の IP を割り当てると、ブラウザから `https://<コンテナの IP>:8080/` で開ける（macvlan なら母艦からは見えない。同じ LAN の別の機械から）。
-- 更新は §6 と同じ（scp の代わりに `incus file push`）。
-
----
-
-## 8. ポート
-
-| 向き | ポート | 相手 | 条件 |
-|---|---|---|---|
-| 外向き UDP | 30001 | DExtra（XLX/XRF） | 同上 |
-| 外向き UDP | 30051 | DCS | 同上 |
-| 外向き UDP | 40000・12345・12346 | XLX の G3 ターミナルモード（`mode=g3` のときだけ。公開 IP の 40000 が届くこと） | 同上 |
-| 外向き UDP | 62031 | TGIF・BrandMeister | net = dmr |
-| 外向き UDP | 62030 | XLX の DMR 入口 | net = dmr |
-| 外向き UDP | 42000 | YSF リフレクター | net = ysf |
-| 外向き TCP | 5040 | TGIF の TG 切り替え API（http） | net = dmr の TGIF |
-| 外向き UDP | 2460 | AMBEserver | `[ambe] mode = server` |
-| 外向き TCP | 14580 | APRS-IS | `[aprs] enable = yes` |
-| 外向き TCP | 443・80 | 一覧の取得（XLX・DCS・YSF の一覧など） | ― |
-| 内向き TCP | 8080 | ブラウザ（Web） | `[web] port` |
-
-詳しくは `01_system_architecture.md` §4（YSF・RefCheck は `11_changes_1.8.3.md` §1.2 が補う）。
-
----
-
-## 9. 手で入れる（install.sh を使わない）
-
-```bash
-sudo mkdir -p /opt/dstar_ambe/static
-sudo cp ~/dxm/source/*.py /opt/dstar_ambe/
-sudo cp ~/dxm/source/static/* /opt/dstar_ambe/static/
-sudo cp ~/dxm/source/config.ini.example /opt/dstar_ambe/config.ini     # §2 のとおり sed で直す
-IP=$(hostname -I | awk '{print $1}'); HN=$(hostname)
-sudo openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-  -keyout /opt/dstar_ambe/key.pem -out /opt/dstar_ambe/cert.pem -subj "/CN=dstar-live" \
-  -addext "subjectAltName=IP:${IP},DNS:${HN},DNS:${HN}.local" -addext "basicConstraints=critical,CA:TRUE"
-sudo chown -R "$(id -un)":"$(id -un)" /opt/dstar_ambe
-sudo chmod 600 /opt/dstar_ambe/key.pem
-sudo chmod 640 /opt/dstar_ambe/config.ini
-sed "s/__USER__/$(id -un)/" ~/dxm/source/dstar-live.service | sudo tee /etc/systemd/system/dstar-live.service >/dev/null
+sudo systemctl stop dxhotspot dstar-live mmdvm-host
+sudo systemctl disable dxhotspot dstar-live mmdvm-host dmrids-update.timer
+sudo rm -f /etc/systemd/system/{dstar-live,dxhotspot,mmdvm-host,dmrids-update}.service
+sudo rm -f /etc/systemd/system/dmrids-update.timer
+sudo rm -rf /opt/dstar_ambe /opt/dxhotspot /opt/MMDVMHost /opt/vocoders
+sudo rm -f /usr/local/sbin/dxhotspot-wifi /usr/local/bin/dmrids-update
+sudo rm -f /etc/sudoers.d/dxhotspot
+sudo userdel dstar
 sudo systemctl daemon-reload
-sudo systemctl enable --now dstar-live
 ```
-
-ユニット（`dstar-live.service`）は `User=__USER__`、`WorkingDirectory=/opt/dstar_ambe`、`ExecStart=/usr/bin/python3 /opt/dstar_ambe/live.py`、`Restart=always`（5 秒）、`PYTHONUNBUFFERED=1`。止める・再起動するときは、送信中なら先に終端を出し、接続を正しく切ってから終わる。
 
 ---
 
-## 10. アンインストール
+## 7. うまくいかないとき
 
-```bash
-sudo systemctl disable --now dstar-live
-sudo rm /etc/systemd/system/dstar-live.service /etc/sudoers.d/dxmonitor
-sudo systemctl daemon-reload
-sudo rm -rf /opt/dstar_ambe /opt/vocoders
-```
-
-（`/etc/sudoers.d/dxmonitor` は §4 で作ったときだけある。`/opt/vocoders` は §3.1 でビルドしたときだけ。）
-
----
-
-## 11. 困ったとき（要点）
-
-| 症状 | 対処 |
+| 症状 | 見ること |
 |---|---|
-| 画面が開かない | `journalctl -u dstar-live -n 50`。ポート・証明書・Python の版 |
-| 画面が動かない・版が黄色 | 20261031j 以前のパッケージで入れたときの `static/style.css`・`app.js` の入れ忘れ（§1.3）。キャッシュなら強制再読み込み |
-| NOT LINKED | 相手のリフレクターが止まっている、またはモジュールが使えない |
-| 音が出ない | AMBEserver に届くか（server）／ボコーダーが開けているか（soft。設定タブと `journalctl` の `[ambe]`） |
-| PTT できない | https で開いているか（マイクは https だけ） |
-| 音がエコーする・二重に聞こえる | 同じ dxmcore を複数のタブ・端末で開いている。後から開いた側に警告が出るので 1 つに絞る |
-| 画面で保存したのに反映されない | 再起動できていない（§4 の sudo の許可）。`sudo systemctl restart dstar-live` |
-| 音が小さい・大きい | 設定タブの受信レベル・送信レベル。`10_audio_settings.md` |
-| 自分で立てたリフレクターにつながらない | 家庭用ルーターの IPv4 over IPv6（`selfhost-reflector-notes.md`） |
+| `bin がこの機械で動きません` | `BUILD-INFO.txt` の「対象」。CPU 違い、または OS が古すぎる |
+| `モデムが見つかりません` | USB の HAT・MCP2221A を接続。場所指定は `sudo DXH_MODEM=/dev/ttyACM0 ./install.sh`。Pi で `/dev/ttyAMA0` が未出現は正常（再起動後に現れる） |
+| OLED が点かない | `sudo i2cdetect -y 1` で `0x3C` が見えるか。配線・I2C 有効化・未再起動を確認 |
+| 画面が開かない | `systemctl status dxhotspot`、`sudo ss -tlnp | grep -E ':(443|80|8080)'` |
+| 設定を保存できない（Permission denied） | `sudo chown -R dstar:dstar /opt/MMDVMHost` |
 
-課題の一覧は `07_issues.md`。
+ログ: `journalctl -u dstar-live -u dxhotspot -u mmdvm-host -f`。
+
+---
+
+認証はありません。LAN（や Tailscale）の誰でも接続・PTT・設定・再起動ができるので、**443/8080 をインターネットに直接公開しないでください**（外から使うなら VPN 経由）。
