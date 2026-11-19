@@ -159,16 +159,39 @@ journalctl -u mmdvm-host -u dstar-live -u dxhotspot -b --no-pager | tail -40
 
 ---
 
-## 6. 入れ直す・消す
+## 6. 更新（新しい版に上げる）・消す
 
-### 入れ直す（新しい版に更新する）
-**§0 を実行して最新を展開 → フォルダの中で `sudo ./install.sh`** をもう一度流せば入れ替わります。設定（`config.ini`・`MMDVM-Host.ini`・`hotspot.ini`）は引き継がれ、局の設定は今の値が既定で出ます。先にバックアップ:
+### 更新（アップデート）
+
+**やることは「最新を取って `install.sh` を流す」だけ。** 初回と違い、**MMDVM-Host は作り直しません**（同じ版なら再利用）。設定（`config.ini`・`MMDVM-Host.ini`・`hotspot.ini`）はそのまま引き継がれ、数分で終わります。
+
+**この機械のターミナル**で、丸ごと貼り付け:
+
+```bash
+cd ~
+read A URL < <(curl -s https://api.github.com/repos/ji2tab/dxmonitor/releases \
+ | python3 -c 'import json,sys
+for r in json.load(sys.stdin):
+ for a in r.get("assets",[]):
+  if a["name"].endswith("_arm64.tar.gz"):
+   print(a["name"], a["browser_download_url"]); sys.exit()')
+echo "更新先: $A"
+curl -fsSL -o "$A" "$URL"; rm -rf "${A%.tar.gz}"; tar xzf "$A"; cd "${A%.tar.gz}"
+sudo ./install.sh
+```
+
+- **局の設定を聞かれたら、そのまま Enter** を押していけば今の値のままです（変えたい項目だけ入力）。
+- ボコーダーの 3 問も、前回と同じでよければ Enter／既定のまま。
+- 最後に「設定を変えたので `sudo reboot`」とは**出ません**（UART・I2C は初回だけ）。サービスは自動で入れ替わり再起動します。
+- 不安なら先にバックアップ:
 
 ```bash
 sudo systemctl stop dxhotspot dstar-live
 sudo cp -a /opt/dstar_ambe /opt/dstar_ambe.bak.$(date +%Y%m%d)
 sudo cp -a /opt/dxhotspot  /opt/dxhotspot.bak.$(date +%Y%m%d)
 ```
+
+> **補足（上級者向け・任意）**: 変更が一部だけの版（例: 画面だけ）は、展開した `bin/` の該当バイナリだけを `/opt/…` に差し替えて該当サービスを再起動すれば、`install.sh` を流さずに更新できます。通常は上の `install.sh` 再実行で十分です。
 
 ### 消す
 ```bash
