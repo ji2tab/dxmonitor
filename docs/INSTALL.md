@@ -5,34 +5,18 @@ Raspberry Pi などに、**バイナリ配布（ソースの .py は配りませ
 | 項目 | 内容 |
 |---|---|
 | 対象版 | dxmonitor 1.8.5（配布物 `dxmonitor_bin_<版>_<arch>.tar.gz`） |
-| 最終更新 | 2026-11-19 |
+| 最終更新 | 2026-11-18 |
 | 配布先 | GitHub の Releases: `https://github.com/ji2tab/dxmonitor/releases` |
 | 対象 | Raspberry Pi など 64bit（arm64）。CPU・OS の条件は配布物の `BUILD-INFO.txt` |
 
 ---
 
-## 0. 入手と展開（コピペ 1 回）
+## 0. 入手
 
-**この機械のターミナル**で、次を丸ごと貼り付けます。最新の配布物（arm64）を自動で取得・展開し、対象 CPU・OS を表示します。**版番号を手で打つ必要はありません。**
+`https://github.com/ji2tab/dxmonitor/releases` から、最新の **`dxmonitor_bin_<版>_<arch>.tar.gz`** を落とします（`arch` は CPU。Raspberry Pi 64bit は `arm64`）。
 
-```bash
-cd ~
-read A URL < <(curl -s https://api.github.com/repos/ji2tab/dxmonitor/releases \
- | python3 -c 'import json,sys
-for r in json.load(sys.stdin):
- for a in r.get("assets",[]):
-  if a["name"].endswith("_arm64.tar.gz"):
-   print(a["name"], a["browser_download_url"]); sys.exit()')
-echo "取得: $A"
-curl -fsSL -o "$A" "$URL"
-rm -rf "${A%.tar.gz}"; tar xzf "$A"
-cd "${A%.tar.gz}"
-echo "=== BUILD-INFO ==="; cat BUILD-INFO.txt
-```
-
-- 配布物は **CPU ごとに別**です（arm64 の配布物は x86_64 の PC では動きません）。
-- **ビルド機より古い OS では動きません。** 上で表示される `BUILD-INFO.txt` の `glibc` の行を確認してください。
-- 特定の版を入れたいときは、Releases のページで版を選び、`dxmonitor_bin_<版>_arm64.tar.gz` を落として `tar xzf` → `cd` してください。
+- 配布物は **CPU ごとに別**です。`arm64` の配布物は x86_64 の PC では動きません。
+- **ビルド機より古い OS では動きません。** 展開後の `BUILD-INFO.txt` の `glibc` の行を確認してください。
 
 ---
 
@@ -54,7 +38,7 @@ apt のリポジトリ、`github.com`（MMDVM-Host のソース）、`radioid.ne
 | 周波数 MHz | 単信。144〜146 / 430〜440 |
 | 接続先に名乗るコール | コール＋空白＋サフィックス 1 文字 |
 | 使える無線機の MY | カンマ区切り。`*` で制限しない |
-| DMR ID | radioid の ID。**DMR を使うなら必須**（空のままだと DMR モードに切り替わりません）。使わないなら空 |
+| DMR ID | radioid の ID。DMR を使わないなら空 |
 | カラーコード／宛先 TG | 0〜15（既定 `1`）／既定 `9` |
 | 電波側／ネット側 | `dstar` / `dmr` / `ysf` |
 
@@ -62,34 +46,23 @@ apt のリポジトリ、`github.com`（MMDVM-Host のソース）、`radioid.ne
 
 ## 2. 入れる
 
-**§0 で展開したフォルダの中にいる状態**で（`cd` 済み）、次を実行します。
+**この機械のターミナル**で実行します。
 
 ```bash
-pwd                         # dxmonitor_bin_... の中にいることを確認
+tar xzf dxmonitor_bin_<版>_<arch>.tar.gz
+cd dxmonitor_bin_<版>_<arch>
+cat BUILD-INFO.txt          # 対象 CPU と OS を確認
 sudo ./install.sh
 ```
 
-ログを残すなら:
+ログを残すなら `sudo ./install.sh 2>&1 | tee ~/install_$(date +%Y%m%d_%H%M).log`。
 
-```bash
-sudo ./install.sh 2>&1 | tee ~/install_$(date +%Y%m%d_%H%M).log
-```
-
-Raspberry Pi Zero 2 W など非力な機械では 30〜60 分かかります。SSH が切れると止まるので、心配なら `tmux` の中で（取得から一気に通ります）:
+Raspberry Pi Zero 2 W など非力な機械では 30〜60 分かかります。SSH が切れると止まるので `tmux` の中で実行してください。
 
 ```bash
 sudo apt install -y tmux
 tmux new -s inst
-# ↓ tmux の中で、これを丸ごと貼る
-cd ~
-read A URL < <(curl -s https://api.github.com/repos/ji2tab/dxmonitor/releases \
- | python3 -c 'import json,sys
-for r in json.load(sys.stdin):
- for a in r.get("assets",[]):
-  if a["name"].endswith("_arm64.tar.gz"):
-   print(a["name"], a["browser_download_url"]); sys.exit()')
-curl -fsSL -o "$A" "$URL"; rm -rf "${A%.tar.gz}"; tar xzf "$A"; cd "${A%.tar.gz}"
-sudo ./install.sh
+cd dxmonitor_bin_<版>_<arch> && sudo ./install.sh
 # 切れたら tmux attach -t inst
 ```
 
@@ -161,8 +134,8 @@ journalctl -u mmdvm-host -u dstar-live -u dxhotspot -b --no-pager | tail -40
 
 ## 6. 入れ直す・消す
 
-### 入れ直す（新しい版に更新する）
-**§0 を実行して最新を展開 → フォルダの中で `sudo ./install.sh`** をもう一度流せば入れ替わります。設定（`config.ini`・`MMDVM-Host.ini`・`hotspot.ini`）は引き継がれ、局の設定は今の値が既定で出ます。先にバックアップ:
+### 入れ直す
+同じ `install.sh` をもう一度流せば入れ替わります。設定（`config.ini`・`MMDVM-Host.ini`・`hotspot.ini`）は引き継がれ、局の設定は今の値が既定で出ます。先にバックアップ:
 
 ```bash
 sudo systemctl stop dxhotspot dstar-live
@@ -194,7 +167,6 @@ sudo systemctl daemon-reload
 | OLED が点かない | `sudo i2cdetect -y 1` で `0x3C` が見えるか。配線・I2C 有効化・未再起動を確認 |
 | 画面が開かない | `systemctl status dxhotspot`、`sudo ss -tlnp | grep -E ':(443|80|8080)'` |
 | 設定を保存できない（Permission denied） | `sudo chown -R dstar:dstar /opt/MMDVMHost` |
-| モードを DMR に変えても D-STAR に戻る | DMR ID が未設定。設定タブ「自局」で DMR ID を入れて保存 |
 
 ログ: `journalctl -u dstar-live -u dxhotspot -u mmdvm-host -f`。
 
