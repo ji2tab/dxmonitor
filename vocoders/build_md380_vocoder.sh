@@ -3,7 +3,7 @@
 #   sudo bash build_md380_vocoder.sh [インストール先（既定 /opt/vocoders）]
 #   できるもの: <インストール先>/md380_dv（32 ビット ARM の静的バイナリ）。config.ini に次を足して使う:
 #     [vocoder.md380]
-#     label = MD-380 ファーム（DMR）
+#     label = MD-380 ファーム
 #     type = pipe
 #     command = /opt/vocoders/md380_dv
 #     modes = dmr            ← DMR 専用（D-STAR の選択肢に出さない）
